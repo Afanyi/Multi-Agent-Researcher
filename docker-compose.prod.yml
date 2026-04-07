@@ -8,10 +8,20 @@ services:
       POSTGRES_DB: researcher
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d researcher"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   api:
     image: ghcr.io/${GITHUB_REPO:-afanyi/multi-agent-researcher}/api:latest
@@ -25,8 +35,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     image: ghcr.io/${GITHUB_REPO:-afanyi/multi-agent-researcher}/worker:latest
@@ -39,8 +51,10 @@ services:
       SERPER_API_KEY: ${SERPER_API_KEY}
       DOMAIN_DEFAULT_ALLOWLIST: ${DOMAIN_DEFAULT_ALLOWLIST}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:

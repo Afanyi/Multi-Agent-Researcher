@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from app.db import Base, engine, get_db
+from app.db import Base, engine, get_db, wait_for_database
 from app.models import ResearchRun, Source, Report, Trace
 from app.schemas import ResearchCreate, ResearchCreated, ResearchOut, SourceOut, ReportOut, TraceOut
 from app.utils import normalize_allowlist
@@ -15,7 +15,8 @@ app = FastAPI(title="Multi-Agent Researcher", version="0.1.0")
 
 @app.on_event("startup")
 def startup():
-    # Starter-friendly: create tables automatically
+    # Wait for the database service before creating tables during local/dev startup.
+    wait_for_database()
     Base.metadata.create_all(bind=engine)
 
 @app.get("/")

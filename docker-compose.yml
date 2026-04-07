@@ -24,8 +24,10 @@ services:
 
   migrate:
     build: .
-    command: ["alembic", "upgrade", "head"]
+    command: ["python", "scripts/dev_migrate.py"]
     env_file: .env
+    volumes:
+      - ./migrations:/app/migrations
     depends_on:
       postgres:
         condition: service_healthy

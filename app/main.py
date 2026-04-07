@@ -50,6 +50,27 @@ def create_research(payload: ResearchCreate, db: Session = Depends(get_db)):
     return ResearchCreated(run_id=run.id, status=run.status)
 
 
+@app.post("/api/v1/research/{run_id}/retry", response_model=ResearchCreated)
+def retry_research(run_id: UUID, db: Session = Depends(get_db)):
+    if not settings.serper_api_key:
+        raise HTTPException(status_code=503, detail="SERPER_API_KEY is not configured")
+
+    run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    if run.status in {"queued", "running", "retrying"}:
+        raise HTTPException(status_code=409, detail=f"run is already {run.status}")
+
+    run.status = "queued"
+    run.error = None
+    db.commit()
+    db.refresh(run)
+
+    run_pipeline.delay(str(run.id))
+    return ResearchCreated(run_id=run.id, status=run.status)
+
+
 @app.get("/api/v1/research/{run_id}", response_model=ResearchOut)
 def get_research(run_id: UUID, db: Session = Depends(get_db)):
     run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one_or_none()

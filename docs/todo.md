@@ -22,18 +22,20 @@ Tasks:
 
 - [x] Add database migrations with Alembic instead of relying on auto-create at startup
 - [x] Make model timestamps update correctly on changes
-- [ ] Improve worker error handling and retry behavior
+- [x] Improve worker error handling and retry behavior
 - [x] Add validation for missing configuration and bad requests
-- [ ] Make research runs idempotent enough to retry safely
+- [x] Make research runs idempotent enough to retry safely
 - [x] Clean up environment variable examples and deployment defaults
 
-Started in this phase:
+Completed in this phase:
 
 - Alembic scaffolding and an initial schema migration are in the repository
 - Docker Compose now runs a dedicated migration step before starting `api` and `worker`
 - API startup no longer creates tables directly with `Base.metadata.create_all(...)`
 - Request validation now trims keywords/domain allowlists and rejects blank keyword input
-- Pipeline runs now clear stale errors and skip reruns for already-succeeded jobs
+- Pipeline runs now clear stale errors, retry transient failures with backoff, and surface `retrying` status
+- Retry requests can be requeued through the API without creating a new run record
+- Worker execution now clears stale artifacts before reruns and skips duplicate in-progress jobs
 
 Done when:
 

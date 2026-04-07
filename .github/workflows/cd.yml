@@ -53,6 +53,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build-and-push]
+    if: ${{ vars.ENABLE_DEPLOY == 'true' }}
 
     steps:
       - name: Deploy via SSH (docker compose)

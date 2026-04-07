@@ -4,25 +4,26 @@
 
 ## Project Status
 
-Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, Docker setup, and CI/CD workflows are implemented. The project is usable as a development MVP, but it is still early-stage and relies on simple heuristics rather than an LLM-driven orchestration layer.
+Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, migration flow, Docker setup, and CI/CD workflows are implemented. Phase 1 backend stabilization is complete. The project is usable as a development MVP, but it is still early-stage and relies on simple heuristics rather than an LLM-driven orchestration layer.
 
 ### Working now
 
 - FastAPI API for creating and retrieving research runs
-- Celery worker pipeline with `queued -> running -> succeeded/failed` run states
+- FastAPI retry endpoint for requeueing failed or completed runs safely
+- Celery worker pipeline with `queued -> running -> retrying -> succeeded/failed` run states
 - Postgres persistence for runs, sources, evidence chunks, reports, and trace events
 - Redis-backed task queue for asynchronous processing
 - Serper-powered search plus page fetch/extraction with `httpx`, `BeautifulSoup`, and `trafilatura`
 - Citation policy enforcement: non-heading paragraphs must include citation tokens like `[1]`
 - Report scoring fields for keyword coverage and confidence
-- Docker Compose setup for local development
+- Alembic migrations, including automatic local schema sync during `docker compose up --build`
+- Docker Compose setup for local development and production-style startup ordering
 - GitHub Actions workflows for CI (`ruff`, `pytest`) and CD (build/push/deploy)
 
 ### Still missing or intentionally basic
 
 - No frontend or dashboard
 - No authentication, rate limiting, or multi-tenant isolation
-- No database migration workflow; tables are auto-created on API startup
 - No end-to-end or integration tests in the repository yet
 - Planner, ranking, evidence extraction, synthesis, and verification are heuristic implementations
 - Search requires a valid `SERPER_API_KEY`; without it, research runs fail in the worker
@@ -44,6 +45,7 @@ Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, Doc
 4. Sources and evidence chunks are stored in Postgres.
 5. A markdown report is synthesized and verified for citations.
 6. The worker stores the report, confidence, coverage, and detailed trace entries.
+7. Transient infrastructure errors are retried with bounded backoff before the run is marked as failed.
 
 ## Quick Start
 
@@ -59,16 +61,20 @@ docker compose up --build
 
 Services started by [docker-compose.yml](/home/blasius/Videos/multi-agent-researcher/docker-compose.yml):
 
+- `migrate`, which waits for Postgres, applies checked-in Alembic revisions, and auto-generates a new revision locally if the database still differs from the SQLAlchemy models
 - `api` on `http://localhost:8000`
 - `worker`
 - `postgres` on `localhost:5432`
 - `redis` on `localhost:6379`
+
+Generated local revisions are written to [migrations/versions](/home/blasius/Videos/multi-agent-researcher/migrations/versions) so they can be reviewed and committed.
 
 ### Local Python environment
 
 ```bash
 pip install -e .
 pip install -e ".[dev]"
+alembic upgrade head
 uvicorn app.main:app --reload
 celery -A worker.celery_app:celery_app worker --loglevel=INFO
 ```
@@ -93,6 +99,7 @@ See [`.env.example`](/home/blasius/Videos/multi-agent-researcher/.env.example) f
 - `GET /` returns service metadata
 - `GET /api/v1/health` returns a health response
 - `POST /api/v1/research` creates a research run
+- `POST /api/v1/research/{run_id}/retry` requeues a failed or completed run
 - `GET /api/v1/research/{run_id}` returns run status, ranked sources, and the stored report
 - `GET /api/v1/research/{run_id}/trace` returns the agent trace
 
@@ -112,7 +119,7 @@ curl -X POST http://localhost:8000/api/v1/research \
 
 The repository includes:
 
-- Unit tests for citation policy and scoring helpers in [tests/test_policies.py](/home/blasius/Videos/multi-agent-researcher/tests/test_policies.py) and [tests/test_scoring.py](/home/blasius/Videos/multi-agent-researcher/tests/test_scoring.py)
+- Unit tests for citation policy, scoring, request validation, and worker retry behavior in [tests/test_policies.py](/home/blasius/Videos/multi-agent-researcher/tests/test_policies.py), [tests/test_scoring.py](/home/blasius/Videos/multi-agent-researcher/tests/test_scoring.py), [tests/test_schemas.py](/home/blasius/Videos/multi-agent-researcher/tests/test_schemas.py), and [tests/test_worker_tasks.py](/home/blasius/Videos/multi-agent-researcher/tests/test_worker_tasks.py)
 - A CI workflow in [.github/workflows/ci.yml](/home/blasius/Videos/multi-agent-researcher/.github/workflows/ci.yml) that installs dependencies, runs `ruff check .`, and runs `pytest -q`
 - A CD workflow in [.github/workflows/cd.yml](/home/blasius/Videos/multi-agent-researcher/.github/workflows/cd.yml) that builds and pushes GHCR images and deploys with Docker Compose over SSH
 
@@ -125,6 +132,8 @@ pytest -q
 
 ## Notes
 
-- The API creates database tables automatically on startup via `Base.metadata.create_all(...)`.
+- The API no longer creates tables directly on startup; schema changes flow through Alembic migrations.
+- Local Docker Compose uses [scripts/dev_migrate.py](/home/blasius/Videos/multi-agent-researcher/scripts/dev_migrate.py) to apply checked-in revisions and auto-generate a new local revision when models drift from the database.
+- Production Compose uses checked-in migrations only; commit generated revisions before deploying schema changes.
 - Because the models use Postgres-specific SQLAlchemy types, Postgres is the intended database for local and production use.
 - The current report generator is deterministic and citation-oriented, but not semantically deep. Improving retrieval, summarization quality, and verifier behavior is the main next step.

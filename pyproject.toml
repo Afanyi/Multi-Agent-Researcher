@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "multi-agent-researcher"
 version = "0.1.0"
@@ -23,6 +27,9 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.4.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*", "worker*"]
 
 [tool.ruff]
 line-length = 100

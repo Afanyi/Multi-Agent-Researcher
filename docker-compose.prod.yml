@@ -14,7 +14,7 @@ services:
     restart: always
 
   api:
-    image: ghcr.io/${GITHUB_REPO}/api:latest
+    image: ghcr.io/${GITHUB_REPO:-afanyi/multi-agent-researcher}/api:latest
     restart: always
     environment:
       DATABASE_URL: postgresql+psycopg://app:${POSTGRES_PASSWORD}@postgres:5432/researcher
@@ -29,7 +29,7 @@ services:
       - redis
 
   worker:
-    image: ghcr.io/${GITHUB_REPO}/worker:latest
+    image: ghcr.io/${GITHUB_REPO:-afanyi/multi-agent-researcher}/worker:latest
     restart: always
     command: ["celery", "-A", "worker.celery_app:celery_app", "worker", "--loglevel=INFO"]
     environment:

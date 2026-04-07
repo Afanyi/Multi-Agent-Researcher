@@ -104,11 +104,17 @@ Goal: protect the MVP from regressions before calling it complete.
 
 Tasks:
 
-- Add API tests for creating and retrieving runs
-- Add worker pipeline tests with mocked search/fetch services
-- Add integration tests for Postgres and Redis backed execution
-- Add test coverage for failure paths and verifier failures
-- Make CI run the full fast test suite reliably
+- [x] Add API tests for creating and retrieving runs
+- [x] Add worker pipeline tests with mocked search/fetch services
+- [x] Add integration tests for Postgres and Redis backed execution
+- [x] Add test coverage for failure paths and verifier failures
+- [x] Make CI run the full fast test suite reliably
+
+Completed in this phase:
+
+- The repository now includes Postgres-backed API integration tests and Redis-backed Celery worker tests
+- The worker test suite covers successful runs, retry flows, verifier failures, and non-retryable search failures
+- CI now applies Alembic migrations against a dedicated test database before running the full pytest suite
 
 Done when:
 

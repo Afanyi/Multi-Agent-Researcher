@@ -4,7 +4,7 @@
 
 ## Project Status
 
-Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, migration flow, Docker setup, and CI/CD workflows are implemented. Phase 1 backend stabilization is complete. The project is usable as a development MVP, but it is still early-stage and relies on simple heuristics rather than an LLM-driven orchestration layer.
+Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, migration flow, Docker setup, CI/CD workflows, and full-stack automated tests are implemented. Phase 1 backend stabilization is complete. The project is usable as a development MVP, but it is still early-stage and relies on simple heuristics rather than an LLM-driven orchestration layer.
 
 ### Working now
 
@@ -24,7 +24,6 @@ Status as of `2026-04-07`: the core API, worker pipeline, persistence layer, mig
 
 - No frontend or dashboard
 - No authentication, rate limiting, or multi-tenant isolation
-- No end-to-end or integration tests in the repository yet
 - Planner, ranking, evidence extraction, synthesis, and verification are heuristic implementations
 - Search requires a valid `SERPER_API_KEY`; without it, research runs fail in the worker
 
@@ -120,6 +119,7 @@ curl -X POST http://localhost:8000/api/v1/research \
 The repository includes:
 
 - Unit tests for citation policy, scoring, request validation, and worker retry behavior in [tests/test_policies.py](/home/blasius/Videos/multi-agent-researcher/tests/test_policies.py), [tests/test_scoring.py](/home/blasius/Videos/multi-agent-researcher/tests/test_scoring.py), [tests/test_schemas.py](/home/blasius/Videos/multi-agent-researcher/tests/test_schemas.py), and [tests/test_worker_tasks.py](/home/blasius/Videos/multi-agent-researcher/tests/test_worker_tasks.py)
+- Postgres-backed API integration tests and Redis-backed Celery pipeline tests in [tests/test_api_integration.py](/home/blasius/Videos/multi-agent-researcher/tests/test_api_integration.py) and [tests/test_pipeline_integration.py](/home/blasius/Videos/multi-agent-researcher/tests/test_pipeline_integration.py)
 - A CI workflow in [.github/workflows/ci.yml](/home/blasius/Videos/multi-agent-researcher/.github/workflows/ci.yml) that installs dependencies, runs `ruff check .`, and runs `pytest -q`
 - A CD workflow in [.github/workflows/cd.yml](/home/blasius/Videos/multi-agent-researcher/.github/workflows/cd.yml) that builds and pushes GHCR images and deploys with Docker Compose over SSH
 

@@ -60,7 +60,7 @@ def extract_evidence(text: str, keywords: str, max_snippets: int = 6) -> list[di
 def synthesize_report(keywords: str, sources: list[dict]) -> str:
     lines = []
     lines.append("# Research report\n")
-    lines.append(f"**Keywords:** `{keywords}`\n")
+    lines.append(f"## Keywords: `{keywords}`\n")
     lines.append("## Summary\n")
 
     bullets = []

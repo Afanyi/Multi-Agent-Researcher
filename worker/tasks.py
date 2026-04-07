@@ -27,9 +27,16 @@ def run_async(coro):
 def run_pipeline(run_id: str):
     db: Session = SessionLocal()
     try:
-        run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one()
+        run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one_or_none()
+        if run is None:
+            return
+
+        if run.status == "succeeded":
+            trace(db, run.id, "pipeline", "info", {"message": "Skipping already-succeeded run."})
+            return
 
         run.status = "running"
+        run.error = None
         db.commit()
 
         trace(db, run.id, "planner", "start", {"keywords": run.keywords})
@@ -122,6 +129,7 @@ def run_pipeline(run_id: str):
 
             if ok and cite_ok:
                 run.status = "succeeded"
+                run.error = None
                 db.commit()
                 return
 
@@ -133,6 +141,7 @@ def run_pipeline(run_id: str):
         try:
             run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one_or_none()
             if run:
+                trace(db, run.id, "pipeline", "error", {"error": str(e)})
                 run.status = "failed"
                 run.error = str(e)
                 db.commit()

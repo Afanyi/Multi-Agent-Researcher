@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from app.db import Base, engine, get_db, wait_for_database
+from app.db import get_db, wait_for_database
 from app.models import ResearchRun, Source, Report, Trace
 from app.schemas import ResearchCreate, ResearchCreated, ResearchOut, SourceOut, ReportOut, TraceOut
 from app.utils import normalize_allowlist
@@ -15,9 +15,8 @@ app = FastAPI(title="Multi-Agent Researcher", version="0.1.0")
 
 @app.on_event("startup")
 def startup():
-    # Wait for the database service before creating tables during local/dev startup.
+    # Database schema is applied through Alembic migrations; startup only waits for connectivity.
     wait_for_database()
-    Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def root():
@@ -30,12 +29,15 @@ def health():
 
 @app.post("/api/v1/research", response_model=ResearchCreated)
 def create_research(payload: ResearchCreate, db: Session = Depends(get_db)):
-    allowlist = normalize_allowlist(payload.domain_allowlist)
+    if not settings.serper_api_key:
+        raise HTTPException(status_code=503, detail="SERPER_API_KEY is not configured")
+
+    allowlist = payload.domain_allowlist
     if allowlist is None and settings.domain_default_allowlist:
         allowlist = normalize_allowlist(settings.domain_default_allowlist.split(","))
 
     run = ResearchRun(
-        keywords=payload.keywords.strip(),
+        keywords=payload.keywords,
         depth=payload.depth,
         domain_allowlist=allowlist,
         status="queued",

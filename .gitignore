@@ -26,6 +26,7 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+migrations/versions/*.py
 
 # IDE/editor local files
 .idea/vcs.xml

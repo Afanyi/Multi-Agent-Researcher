@@ -16,8 +16,13 @@ class ResearchRun(Base):
     domain_allowlist: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
 
     sources: Mapped[list["Source"]] = relationship(back_populates="run", cascade="all, delete-orphan")
     report: Mapped["Report"] = relationship(back_populates="run", cascade="all, delete-orphan", uselist=False)
@@ -61,7 +66,7 @@ class Report(Base):
     report_md: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     coverage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     run: Mapped["ResearchRun"] = relationship(back_populates="report")
 
@@ -74,6 +79,6 @@ class Trace(Base):
     agent: Mapped[str] = mapped_column(String(32), nullable=False)
     event_type: Mapped[str] = mapped_column(String(16), nullable=False)  # start|end|info|warning|error
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     run: Mapped["ResearchRun"] = relationship(back_populates="traces")

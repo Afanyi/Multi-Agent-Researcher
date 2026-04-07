@@ -1,0 +1,69 @@
+name: CD
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Meta
+        id: meta
+        run: echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push (API)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}/api:${{ steps.meta.outputs.tag }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+
+      - name: Build & push (Worker)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}/worker:${{ steps.meta.outputs.tag }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+
+      - name: Tag latest
+        run: |
+          docker tag ghcr.io/${{ github.repository }}/api:${{ steps.meta.outputs.tag }} ghcr.io/${{ github.repository }}/api:latest
+          docker tag ghcr.io/${{ github.repository }}/worker:${{ steps.meta.outputs.tag }} ghcr.io/${{ github.repository }}/worker:latest
+          docker push ghcr.io/${{ github.repository }}/api:latest
+          docker push ghcr.io/${{ github.repository }}/worker:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+
+    steps:
+      - name: Deploy via SSH (docker compose)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+
+            # Smoke check
+            curl -fsS http://localhost:8000/api/v1/health

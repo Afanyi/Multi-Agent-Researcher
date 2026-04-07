@@ -1,3 +1,4 @@
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from app.models import Trace, Report, Source, EvidenceChunk, ResearchRun
 from app.policies import enforce_no_cite_no_claim
@@ -9,10 +10,20 @@ def trace(db: Session, run_id, agent: str, event_type: str, payload: dict):
     db.commit()
 
 
-def save_sources_and_chunks(db: Session, run: ResearchRun, sources_payload: list[dict]):
-    # clear previous (if retry)
-    db.query(EvidenceChunk).join(Source).filter(Source.run_id == run.id).delete(synchronize_session=False)
+def clear_sources_and_chunks(db: Session, run: ResearchRun) -> None:
+    source_ids = select(Source.id).where(Source.run_id == run.id)
+    db.execute(delete(EvidenceChunk).where(EvidenceChunk.source_id.in_(source_ids)))
     db.query(Source).filter(Source.run_id == run.id).delete(synchronize_session=False)
+
+
+def reset_run_artifacts(db: Session, run: ResearchRun) -> None:
+    clear_sources_and_chunks(db, run)
+    db.query(Report).filter(Report.run_id == run.id).delete(synchronize_session=False)
+    db.query(Trace).filter(Trace.run_id == run.id).delete(synchronize_session=False)
+
+
+def save_sources_and_chunks(db: Session, run: ResearchRun, sources_payload: list[dict]):
+    clear_sources_and_chunks(db, run)
     db.commit()
 
     for s in sources_payload:

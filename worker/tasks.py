@@ -1,13 +1,19 @@
 import asyncio
+import httpx
+from celery.exceptions import Retry
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from worker.celery_app import celery_app
 from app.db import SessionLocal
 from app.models import ResearchRun
-from app.orchestrator import trace, save_sources_and_chunks, upsert_report
+from app.orchestrator import reset_run_artifacts, trace, save_sources_and_chunks, upsert_report
 from worker.tools import serper_search, fetch_and_extract, SearchError
 from worker.agents import planner, score_candidate, extract_evidence, synthesize_report, verify_report
 from app.utils import get_domain
+
+
+MAX_PIPELINE_RETRIES = 3
 
 
 def run_async(coro):
@@ -23,14 +29,60 @@ def run_async(coro):
     return loop.run_until_complete(coro)
 
 
-@celery_app.task(name="worker.tasks.run_pipeline")
-def run_pipeline(run_id: str):
+def is_retryable_error(exc: Exception) -> bool:
+    if isinstance(exc, SearchError):
+        return False
+    if isinstance(exc, OperationalError):
+        return True
+    if isinstance(exc, httpx.RequestError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        return status_code == 429 or status_code >= 500
+    return False
+
+
+def retry_delay_for(retry_number: int) -> int:
+    # 5s, 10s, 20s, then cap at 30s for any later retries.
+    return min(30, 5 * (2**retry_number))
+
+
+def claim_run_for_execution(db: Session, run_id: str) -> tuple[ResearchRun | None, str]:
+    run = db.query(ResearchRun).filter(ResearchRun.id == run_id).with_for_update().one_or_none()
+    if run is None:
+        return None, "missing"
+
+    if run.status == "succeeded":
+        db.rollback()
+        return run, "skip_succeeded"
+
+    if run.status == "running":
+        db.rollback()
+        return run, "skip_in_progress"
+
+    reset_run_artifacts(db, run)
+    run.status = "running"
+    run.error = None
+    db.commit()
+    db.refresh(run)
+    return run, "claimed"
+
+
+@celery_app.task(name="worker.tasks.run_pipeline", bind=True, max_retries=MAX_PIPELINE_RETRIES)
+def run_pipeline(self, run_id: str):
     db: Session = SessionLocal()
     try:
-        run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one()
+        run, action = claim_run_for_execution(db, run_id)
+        if action == "missing":
+            return
 
-        run.status = "running"
-        db.commit()
+        if action == "skip_succeeded":
+            trace(db, run.id, "pipeline", "info", {"message": "Skipping already-succeeded run."})
+            return
+
+        if action == "skip_in_progress":
+            trace(db, run.id, "pipeline", "info", {"message": f"Skipping run with status '{run.status}'."})
+            return
 
         trace(db, run.id, "planner", "start", {"keywords": run.keywords})
         plan = planner(run.keywords, run.domain_allowlist)
@@ -122,6 +174,7 @@ def run_pipeline(run_id: str):
 
             if ok and cite_ok:
                 run.status = "succeeded"
+                run.error = None
                 db.commit()
                 return
 
@@ -129,13 +182,36 @@ def run_pipeline(run_id: str):
         run.error = "Verifier failed after retries: " + "; ".join(last_issues[:10])
         db.commit()
 
+    except Retry:
+        raise
     except Exception as e:
         try:
             run = db.query(ResearchRun).filter(ResearchRun.id == run_id).one_or_none()
             if run:
+                trace(db, run.id, "pipeline", "error", {"error": str(e)})
+                if is_retryable_error(e) and self.request.retries < self.max_retries:
+                    delay = retry_delay_for(self.request.retries)
+                    run.status = "retrying"
+                    run.error = f"Transient error. Retrying in {delay}s: {e}"
+                    db.commit()
+                    trace(
+                        db,
+                        run.id,
+                        "pipeline",
+                        "warning",
+                        {
+                            "message": "Transient error. Scheduling retry.",
+                            "retry_in_seconds": delay,
+                            "current_retry": self.request.retries + 1,
+                        },
+                    )
+                    raise self.retry(exc=e, countdown=delay)
+
                 run.status = "failed"
                 run.error = str(e)
                 db.commit()
+        except Retry:
+            raise
         except Exception:
             pass
         raise

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -10,13 +11,14 @@ from app.config import settings
 from worker.tasks import run_pipeline  # Celery task
 
 
-app = FastAPI(title="Multi-Agent Researcher", version="0.1.0")
-
-
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     # Database schema is applied through Alembic migrations; startup only waits for connectivity.
     wait_for_database()
+    yield
+
+
+app = FastAPI(title="Multi-Agent Researcher", version="0.1.0", lifespan=lifespan)
 
 @app.get("/")
 def root():

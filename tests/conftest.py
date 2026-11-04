@@ -65,11 +65,14 @@ def pytest_configure(config: pytest.Config) -> None:
 def integration_environment() -> None:
     _require_test_database()
     try:
-        wait_for_database(max_attempts=5, delay_seconds=0.2)
+        wait_for_database(max_attempts=30, delay_seconds=0.5)
     except Exception as exc:  # pragma: no cover - only reached when infra is absent
         pytest.skip(f"Postgres is not available for integration tests: {exc}", allow_module_level=True)
 
-    command.upgrade(_make_alembic_config(), "head")
+    try:
+        command.upgrade(_make_alembic_config(), "head")
+    except Exception as exc:
+        pytest.fail(f"Failed to run Alembic migrations: {exc}")
 
 
 @pytest.fixture
